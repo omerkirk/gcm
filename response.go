@@ -18,3 +18,17 @@ type Result struct {
 	RegistrationID string `json:"registration_id"`
 	Error          string `json:"error"`
 }
+
+//Response error messages for convenience
+const (
+	ResponseErrorMissingRegistration = "MissingRegistration"
+	ResponseErrorInvalidRegistration = "InvalidRegistration"
+	ResponseErrorMismatchSenderID    = "MismatchSenderId"
+	ResponseErrorNotRegistered       = "NotRegistered"
+	ResponseErrorMessageTooBig       = "MessageTooBig"
+	ResponseErrorInvalidDataKey      = "InvalidDataKey"
+	ResponseErrorInvalidTTL          = "InvalidTtl"
+	ResponseErrorUnavailable         = "Unavailable"
+	ResponseErrorInternalServerError = "InternalServerError"
+	ResponseErrorInvalidPackageName  = "InvalidPackageName"
+)

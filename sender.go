@@ -15,11 +15,31 @@ import (
 
 const (
 	// GcmSendEndpoint is the endpoint for sending messages to the GCM server.
-	GcmSendEndpoint = "https://android.googleapis.com/gcm/send"
+	GcmSendEndpoint = "https://gcm-http.googleapis.com/gcm/send"
 	// Initial delay before first retry, without jitter.
 	backoffInitialDelay = 1000
 	// Maximum delay before a retry.
 	maxBackoffDelay = 1024000
+
+	maxRegistrationCount = 1000
+)
+
+var (
+	//Errors related to GCM post request
+	JsonErr           = errors.New("gcm: invalid json")
+	AuthenticationErr = errors.New("gcm: unauthorized request, check the api key")
+	ServerErr         = errors.New("gcm: internal server error")
+	UnknownErr        = errors.New("gcm: unknown error")
+
+	//Errors related to configuration
+	EmptyAPIKeyErr = errors.New("gcm: the sender's API key must not be empty")
+
+	//Errors related to messages
+	NilMessageErr          = errors.New("gcm: the message must not be nil")
+	NoRecipientErr         = errors.New("gcm: the message's RegistrationIDs field must not be nil")
+	TooManyRecipientsErr   = errors.New("gcm: the message may specify at most 1000 registration IDs")
+	ExpirationRangeErr     = errors.New("gcm: the message's TimeToLive field must be an integer between 0 and 2419200 (4 weeks)")
+	PayloadSizeExceededErr = errors.New("gcm: the message payload size cannot be larger than 4096 KB")
 )
 
 // Declared as a mutable variable for testing purposes.
@@ -77,7 +97,16 @@ func (s *Sender) SendNoRetry(msg *Message) (*Response, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("%d error: %s", resp.StatusCode, resp.Status)
+		switch {
+		case resp.StatusCode == http.StatusUnauthorized:
+			return nil, AuthenticationErr
+		case resp.StatusCode == http.StatusBadRequest:
+			return nil, JsonErr
+		case resp.StatusCode >= 500 && resp.StatusCode <= 599:
+			return nil, ServerErr
+		default:
+			return nil, UnknownErr
+		}
 	}
 
 	body, err := ioutil.ReadAll(resp.Body)
@@ -163,7 +192,7 @@ func updateStatus(msg *Message, resp *Response, allResults map[string]Result) in
 	for i := 0; i < len(resp.Results); i++ {
 		regID := msg.RegistrationIDs[i]
 		allResults[regID] = resp.Results[i]
-		if resp.Results[i].Error == "Unavailable" {
+		if resp.Results[i].Error == ResponseErrorUnavailable {
 			unsentRegIDs = append(unsentRegIDs, regID)
 		}
 	}
@@ -185,7 +214,7 @@ func min(a, b int) int {
 // initializes a zeroed http.Client if one has not been provided.
 func checkSender(sender *Sender) error {
 	if sender.ApiKey == "" {
-		return errors.New("the sender's API key must not be empty")
+		return EmptyAPIKeyErr
 	}
 	if sender.Http == nil {
 		sender.Http = new(http.Client)
@@ -196,16 +225,15 @@ func checkSender(sender *Sender) error {
 // checkMessage returns an error if the message is not well-formed.
 func checkMessage(msg *Message) error {
 	if msg == nil {
-		return errors.New("the message must not be nil")
+		return NilMessageErr
 	} else if msg.RegistrationIDs == nil {
-		return errors.New("the message's RegistrationIDs field must not be nil")
+		return NoRecipientErr
 	} else if len(msg.RegistrationIDs) == 0 {
-		return errors.New("the message must specify at least one registration ID")
+		return NoRecipientErr
 	} else if len(msg.RegistrationIDs) > 1000 {
-		return errors.New("the message may specify at most 1000 registration IDs")
+		return TooManyRecipientsErr
 	} else if msg.TimeToLive < 0 || 2419200 < msg.TimeToLive {
-		return errors.New("the message's TimeToLive field must be an integer " +
-			"between 0 and 2419200 (4 weeks)")
+		return ExpirationRangeErr
 	}
 	return nil
 }
