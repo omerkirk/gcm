@@ -27,6 +27,18 @@ type Message struct {
 	//TODO add notification before opensourcing
 	Data         map[string]interface{} `json:"data,omitempty"`
 	Notification Notification           `json:"notification,omitempty"`
+
+	//Private field to be able to add extra key values
+	//i.e To add notification or thread info for logging
+	extra map[string]interface{}
+}
+
+func (msg *Message) SetExtra(extra map[string]interface{}) {
+	msg.extra = extra
+}
+
+func (msg *Message) Extra() map[string]interface{} {
+	return msg.extra
 }
 
 //https://developers.google.com/cloud-messaging/http-server-ref#table2
